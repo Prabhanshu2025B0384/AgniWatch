@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+httpx
+pandas
+numpy
+scikit-learn
+shapely
+supabase
+python-dotenv
+x402
+x402-avm[avm]
+websockets>=14.0
+mnemonic
+slip10

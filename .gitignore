@@ -1,0 +1,29 @@
+# Environments
+.env
+.env.*
+!.env.example
+
+# Python
+venv/
+.venv/
+backend/venv/
+__pycache__/
+*.py[cod]
+
+# Node
+node_modules/
+dist/
+build/
+.vite/
+
+# Logs and runtime
+logs/
+.runtime/
+.run/
+*.log
+
+# OS & IDE
+.vscode/
+.idea/
+.DS_Store
+*.swp
