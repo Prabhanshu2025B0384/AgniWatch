@@ -30,7 +30,7 @@ export const demoAvmSigner: ClientAvmSigner = {
 };
 
 // Register the scheme for Algorand TestNet
-baseClient.register('algorand:testnet', new ExactAvmScheme(demoAvmSigner));
+baseClient.register('algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=', new ExactAvmScheme(demoAvmSigner));
 
 export const httpClient = new x402HTTPClient(baseClient);
 

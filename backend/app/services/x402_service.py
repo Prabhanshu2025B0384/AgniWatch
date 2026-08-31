@@ -16,13 +16,30 @@ facilitator_client = HTTPFacilitatorClient(
 # Initialize the resource server
 x402_server = x402ResourceServer(facilitator_client)
 
-# Register the AVM scheme
-network_str = f"algorand:{settings.ALGORAND_NETWORK}"
+ALGORAND_GENESIS_HASHES = {
+    "testnet": "SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=",
+    "mainnet": "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
+}
+algorand_network_id = ALGORAND_GENESIS_HASHES.get(settings.ALGORAND_NETWORK, settings.ALGORAND_NETWORK)
+network_str = f"algorand:{algorand_network_id}"
+
+# Monkey-patch ExactAvmScheme bug in x402 python SDK
+from x402.mechanisms.avm.exact.server import ExactAvmScheme
+if not hasattr(ExactAvmScheme, 'default_asset_transfer_method'):
+    ExactAvmScheme.default_asset_transfer_method = 'axfer'
+if not hasattr(ExactAvmScheme, 'payment_flows'):
+    ExactAvmScheme.payment_flows = {
+        'axfer': {
+            'default': 'standard',
+            'supported': ['standard']
+        }
+    }
+
 x402_server.register(network_str, ExactAvmServerScheme())
 
 async def init_x402():
     """Call this on startup to fetch supported kinds from facilitator"""
-    await x402_server.initialize()
+    x402_server.initialize()
 
 from x402.schemas.base import AssetAmount
 
@@ -48,7 +65,7 @@ async def require_payment(request: Request):
     def build_config():
         return ResourceConfig(
             scheme="exact",
-            network=f"algorand:{settings.ALGORAND_NETWORK}",
+            network=network_str,
             pay_to=settings.ALGORAND_RECEIVER_ADDRESS,
             price=asset_amount,
         )
@@ -57,7 +74,7 @@ async def require_payment(request: Request):
     if not x_payment:
         config = build_config()
         requirements = x402_server.build_payment_requirements(config)
-        payment_required = x402_server.create_payment_required_response(requirements)
+        payment_required = await x402_server.create_payment_required_response(requirements)
         
         # Serialize to JSON and Base64 encode for header
         req_json = payment_required.model_dump_json()

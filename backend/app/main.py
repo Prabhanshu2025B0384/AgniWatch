@@ -1,12 +1,20 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.api import health, payments, hotspots, analysis, agent, demo_wallet
+from app.services.x402_service import init_x402
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_x402()
+    yield
 
 app = FastAPI(
     title="AgniWatch API",
     description="Backend for AgniWatch agentic satellite-thermal-intelligence platform",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # CORS configuration

@@ -16,29 +16,22 @@ async def sign_payment(req: SignRequest):
     Demo Wallet Signer: Signs an Algorand transaction using the server-side Pera 24-word phrase.
     This simulates a user's wallet approving the x402 payment.
     """
-    if not settings.APP_WALLET_PASSPHRASE:
+    wallet_phrase = settings.APP_WALLET_PASSPHRASE or settings.APP_WALLET_MNEMONIC
+    if not wallet_phrase:
         raise HTTPException(status_code=400, detail="Demo wallet passphrase not configured on server")
         
     try:
         from mnemonic import Mnemonic
-        import slip10
+        from slip10 import SLIP10
         import algosdk
         
         # 1. Get the 512-bit seed from the 24-word phrase
         mnemo = Mnemonic("english")
-        seed_bytes = mnemo.to_seed(settings.APP_WALLET_PASSPHRASE)
+        seed_bytes = mnemo.to_seed(wallet_phrase)
         
         # 2. Derive the key using SLIP-10 for Ed25519 using the Algorand path m/44'/283'/0'/0'/0'
-        path = [
-            slip10.harden(44),
-            slip10.harden(283),
-            slip10.harden(0),
-            slip10.harden(0),
-            slip10.harden(0)
-        ]
-        
-        derived = slip10.derive(seed_bytes, path, slip10.Curve.ed25519)
-        private_key_seed = derived[0]
+        node = SLIP10.from_seed(seed_bytes, curve_name='ed25519')
+        private_key_seed = node.get_privkey_from_path("m/44'/283'/0'/0'/0'")
         
         signing_key = nacl.signing.SigningKey(private_key_seed)
         verifying_key = signing_key.verify_key
@@ -64,27 +57,20 @@ async def sign_payment(req: SignRequest):
 
 @router.get("/address")
 async def get_demo_address():
-    if not settings.APP_WALLET_PASSPHRASE:
+    wallet_phrase = settings.APP_WALLET_PASSPHRASE or settings.APP_WALLET_MNEMONIC
+    if not wallet_phrase:
         raise HTTPException(status_code=400, detail="Demo wallet passphrase not configured on server")
     try:
         from mnemonic import Mnemonic
-        import slip10
+        from slip10 import SLIP10
         
         # 1. Get the 512-bit seed from the 24-word phrase
         mnemo = Mnemonic("english")
-        seed_bytes = mnemo.to_seed(settings.APP_WALLET_PASSPHRASE)
+        seed_bytes = mnemo.to_seed(wallet_phrase)
         
         # 2. Derive the key using SLIP-10 for Ed25519 using the Algorand path m/44'/283'/0'/0'/0'
-        path = [
-            slip10.harden(44),
-            slip10.harden(283),
-            slip10.harden(0),
-            slip10.harden(0),
-            slip10.harden(0)
-        ]
-        
-        derived = slip10.derive(seed_bytes, path, slip10.Curve.ed25519)
-        private_key_seed = derived[0]
+        node = SLIP10.from_seed(seed_bytes, curve_name='ed25519')
+        private_key_seed = node.get_privkey_from_path("m/44'/283'/0'/0'/0'")
         
         signing_key = nacl.signing.SigningKey(private_key_seed)
         verifying_key = signing_key.verify_key
