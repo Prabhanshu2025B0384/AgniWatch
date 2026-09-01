@@ -1,0 +1,144 @@
+import asyncio
+import os
+import sys
+import base64
+from pathlib import Path
+
+# Add the app to path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from app.core.config import settings
+import algosdk
+from algosdk.v2client import algod
+from algosdk.transaction import AssetTransferTxn, wait_for_confirmation
+import nacl.signing
+from slip10 import SLIP10
+from mnemonic import Mnemonic
+
+def run():
+    print("==================================================")
+    print("RECEIVER USDC OPT-IN VERIFICATION")
+    print("==================================================")
+    
+    # 1. Load Mnemonic and Derive
+    wallet_phrase = settings.APP_WALLET_MNEMONIC
+    if not wallet_phrase:
+        print("ERROR: APP_WALLET_MNEMONIC not set")
+        return
+        
+    mnemo = Mnemonic("english")
+    seed_bytes = mnemo.to_seed(wallet_phrase)
+    node = SLIP10.from_seed(seed_bytes, curve_name='ed25519')
+    
+    expected_receiver = "XCWU7JAXUTY2RPNLW2P645HQ46DKL3OV26D2ZO7DT66WR2HKP7YA7ONGFE"
+    
+    receiver_sk = None
+    receiver_address = None
+    derivation_index = -1
+    derived_addrs = []
+    
+    print("Searching for derivation index...")
+    for i in range(100):
+        # e.g., m/44'/283'/0'/0'/0', m/44'/283'/0'/0'/1'
+        try:
+            private_key_seed = node.get_privkey_from_path(f"m/44'/283'/0'/0'/{i}'")
+        except Exception as e:
+            continue
+            
+        signing_key = nacl.signing.SigningKey(private_key_seed)
+        verifying_key = signing_key.verify_key
+        algo_sk = base64.b64encode(private_key_seed + bytes(verifying_key)).decode('utf-8')
+        
+        addr = algosdk.account.address_from_private_key(algo_sk)
+        derived_addrs.append(addr)
+        
+        if addr == expected_receiver:
+            receiver_sk = algo_sk
+            receiver_address = addr
+            derivation_index = i
+            break
+
+    if not receiver_sk:
+        print(f"ERROR: Could not find receiver address {expected_receiver} in the first 100 derivation paths.")
+        print("Addresses produced:")
+        for idx, a in enumerate(derived_addrs):
+            if idx < 5:  # print just a few to keep it clean, or all if preferred
+                print(f"Index {idx}: {a}")
+        print("...")
+        return
+        
+    print(f"Found receiver address at index {derivation_index}: {receiver_address}")
+    
+    # 3. Query TestNet
+    asset_id = 10458941
+    algod_client = algod.AlgodClient("", settings.ALGOD_TESTNET_URL, headers={"User-Agent": "DoIt"})
+    
+    try:
+        acc_info = algod_client.account_info(receiver_address)
+        algo_bal = acc_info.get('amount', 0) / 1_000_000
+        print(f"Receiver ALGO balance: {algo_bal} ALGO")
+        
+        usdc_asset = next((a for a in acc_info.get('assets', []) if str(a['asset-id']) == str(asset_id)), None)
+        
+        if usdc_asset:
+            print("Receiver is ALREADY OPTED IN to ASA 10458941.")
+            print(f"Receiver USDC Balance: {usdc_asset.get('amount', 0) / 1_000_000} USDC")
+            
+            print("\nREPORT:")
+            print(f"- derivation index used: {derivation_index}")
+            print(f"- receiver address: {receiver_address}")
+            print(f"- ALGO balance: {algo_bal} ALGO")
+            print(f"- opt-in transaction ID: N/A (Already opted in)")
+            print("- confirmed round: N/A")
+            print(f"- USDC balance after opt-in: {usdc_asset.get('amount', 0) / 1_000_000}")
+            return
+            
+        print("Receiver is NOT opted in. Proceeding with opt-in...")
+        
+        # 4. Construct Opt-In Transaction
+        params = algod_client.suggested_params()
+        
+        txn = AssetTransferTxn(
+            sender=receiver_address,
+            sp=params,
+            receiver=receiver_address,
+            amt=0,
+            index=asset_id
+        )
+        
+        # 5. Sign Transaction
+        signed_txn = txn.sign(receiver_sk)
+        
+        # 6. Submit Transaction
+        txid = algod_client.send_transaction(signed_txn)
+        print(f"Opt-in transaction submitted. TXID: {txid}")
+        
+        # 7. Wait for confirmation
+        print("Waiting for confirmation...")
+        confirmed_txn = wait_for_confirmation(algod_client, txid, 4)
+        conf_round = confirmed_txn.get("confirmed-round", 0)
+        print(f"Transaction confirmed in round {conf_round}.")
+        
+        # 8. Query again
+        acc_info = algod_client.account_info(receiver_address)
+        usdc_asset = next((a for a in acc_info.get('assets', []) if str(a['asset-id']) == str(asset_id)), None)
+        final_bal = usdc_asset.get('amount', 0) / 1_000_000 if usdc_asset else "UNKNOWN"
+        
+        print(f"Verification successful. ASA 10458941 exists in opted-in assets.")
+        
+        # 9. Report
+        print("\nREPORT:")
+        print(f"- derivation index used: {derivation_index}")
+        print(f"- receiver address: {receiver_address}")
+        print(f"- ALGO balance: {algo_bal} ALGO")
+        print(f"- opt-in transaction ID: {txid}")
+        print(f"- confirmed round: {conf_round}")
+        print(f"- USDC balance after opt-in: {final_bal}")
+        
+    except Exception as e:
+        print(f"ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    run()

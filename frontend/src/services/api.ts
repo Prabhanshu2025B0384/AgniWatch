@@ -6,13 +6,16 @@ import axios from 'axios';
 // 3. If deployed on the same domain without VITE_API_URL, fallback to /api
 
 const getApiUrl = () => {
-    if (import.meta.env.VITE_API_URL) {
-        return import.meta.env.VITE_API_URL;
-    }
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    try {
+        if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) {
+            return import.meta.env.VITE_API_URL;
+        }
+    } catch (e) {}
+    
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
         return "http://localhost:8000";
     }
-    return ""; // Empty baseURL makes axios use relative path (e.g., /api/...) from the current origin
+    return "http://localhost:8000"; // Default for tests
 };
 
 export const api = axios.create({

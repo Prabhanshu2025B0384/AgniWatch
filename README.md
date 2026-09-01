@@ -83,9 +83,17 @@ The backend relies on Supabase for data persistence (caching hotspot analysis an
 
 ### Algorand / x402 Web3 Monetization
 Deep analysis endpoints (`GET /api/analysis/{hotspot_id}`) are guarded by the HTTP `402 Payment Required` protocol.
-1. The backend natively parses `APP_WALLET_PASSPHRASE` on startup. If the derived public key does not match `ALGORAND_RECEIVER_ADDRESS`, the server will safely abort.
-2. The frontend uses a custom Axios interceptor and `@x402/core` to build an unsigned Algorand AVM transaction upon hitting a `402`.
-3. The frontend utilizes a secure `POST /api/demo/sign-payment` backend endpoint to sign the transaction (keeping the passphrase safely on the server), then settles the payment with GoPlausible to unlock the premium data.
+1. The backend enforces payment via a FastAPI dependency, utilizing the `authorization` payment flow and expecting a valid `payment-signature` header.
+2. The frontend uses a custom Axios interceptor and `@x402/core` to intercept `402` responses.
+3. It builds an Algorand AVM transaction and securely settles the payment via the GoPlausible Facilitator (`HTTPFacilitatorClient`).
+4. Upon successful settlement, the interceptor automatically retries the original request with the authorized payment signature, unlocking the premium data seamlessly.
+
+### Helper Scripts & Diagnostics
+To facilitate x402 local development and testing on the Algorand TestNet, several standalone scripts are provided:
+- **Diagnostics**: `backend/diagnostic.py` checks environment variables, wallet ALGO balances, and USDC opt-in statuses.
+- **Opt-In Scripts**: `backend/optin_asset.py`, `backend/payer_optin.py`, and `backend/receiver_optin.py` programmatically opt your testnet wallets into the USDC asset.
+- **Wait for USDC**: `backend/wait_for_usdc.py` polls your wallet until USDC is received (useful when funding from a faucet).
+- **E2E Testing**: `backend/test_e2e_x402.py` and `frontend/test_e2e_x402.ts` perform full end-to-end integration tests of the backend challenge and frontend interceptor payment flow.
 
 ### NASA FIRMS & Overpass
 Real-time thermal hotspot data is pulled from NASA FIRMS APIs. Contextual geographic data (proximity to industry, forests, and settlements) is pulled via Overpass (OpenStreetMap) to enrich the rule-based risk classification.
@@ -106,4 +114,4 @@ The backend is optimized for deployment on Render as a Web Service.
 
 ## Current Limitations
 - ML Engine is rule-based; future phases will introduce genuine historical data training.
-- The `demo_wallet` signing endpoint securely signs transactions on behalf of the user for seamless hackathon demonstration. In a true production environment, the frontend would directly utilize a browser-based Algorand wallet extension (e.g., Pera Web) to sign the x402 transaction client-side.
+- In a true production environment, the frontend would directly utilize a browser-based Algorand wallet extension (e.g., Pera Web, Defly) to sign the x402 transaction client-side, rather than relying on a demo local signer.

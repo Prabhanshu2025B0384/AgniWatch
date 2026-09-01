@@ -4,6 +4,7 @@ import { api } from './api';
 import axios from 'axios';
 
 const baseClient = new x402Client();
+baseClient.setSpendControls(false);
 
 export const demoAvmSigner: ClientAvmSigner = {
     address: "", // Will be populated right before payment
@@ -32,7 +33,10 @@ export const demoAvmSigner: ClientAvmSigner = {
 // Register the scheme for Algorand TestNet
 baseClient.register('algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=', new ExactAvmScheme(demoAvmSigner));
 
-export const httpClient = new x402HTTPClient(baseClient);
+import { HTTPFacilitatorClient } from '@x402/core/http';
+const facilitatorClient = new HTTPFacilitatorClient({ url: 'https://facilitator.goplausible.xyz' });
+
+export const httpClient = new x402HTTPClient(baseClient, facilitatorClient);
 
 // Setup the axios interceptor
 api.interceptors.response.use(
@@ -64,6 +68,7 @@ api.interceptors.response.use(
                 
                 // Attach the new headers and retry the request
                 error.config.headers = { ...error.config.headers, ...headers };
+                console.log("Retrying request with headers:", Object.keys(error.config.headers));
                 
                 // Fire an event for success
                 window.dispatchEvent(new CustomEvent('x402-payment-success', { detail: { payload } }));

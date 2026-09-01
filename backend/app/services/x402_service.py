@@ -30,8 +30,8 @@ if not hasattr(ExactAvmScheme, 'default_asset_transfer_method'):
 if not hasattr(ExactAvmScheme, 'payment_flows'):
     ExactAvmScheme.payment_flows = {
         'axfer': {
-            'default': 'standard',
-            'supported': ['standard']
+            'default': 'authorization',
+            'supported': ['authorization']
         }
     }
 
@@ -48,7 +48,7 @@ async def require_payment(request: Request):
     FastAPI dependency that enforces x402 payment.
     Use this on endpoints that require payment.
     """
-    x_payment = request.headers.get("x-payment")
+    x_payment = request.headers.get("payment-signature")
     
     # Calculate microUSDC
     try:
@@ -89,8 +89,8 @@ async def require_payment(request: Request):
     # Validate payment header
     try:
         # Decode base64 header
-        payload_json = base64.b64decode(x_payment).decode()
-        payload = parse_payment_payload(payload_json)
+        payload_json = base64.urlsafe_b64decode(x_payment + '=' * (4 - len(x_payment) % 4)).decode()
+        payload = parse_payment_payload(json.loads(payload_json))
         
         # We need to construct requirements again to verify
         config = build_config()
@@ -104,7 +104,9 @@ async def require_payment(request: Request):
         verify_result = await x402_server.verify_payment(payload, matching_req)
         
         if not verify_result.is_valid:
-            raise HTTPException(status_code=402, detail="Payment Verification Failed")
+            reason = getattr(verify_result, 'model_dump_json', lambda: str(verify_result))()
+            print(f"Payment Verification Failed: {reason}")
+            raise HTTPException(status_code=402, detail=f"Payment Verification Failed: {reason}")
             
         # Optional: Can attach result to request state for downstream handlers
         request.state.payment_payload = payload
